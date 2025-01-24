@@ -6,33 +6,134 @@ import { tokens } from "../data/tokens";
 import { chains } from "../data/chains";
 import { useTransactionHistory } from "../hooks/useTransactionHistory";
 
-import { ethers } from "ethers";
+import { ethers, parseEther } from "ethers";
 import { abi } from "../abi/CrossChainJustInLiquidity.json";
+
+// Map chain IDs to contract address keys
+const contractAddresses = {
+  sepolia: import.meta.env.VITE_CONTRACT_ADDRESS_SEPOLIA,
+  otherNetwork: import.meta.env.VITE_CONTRACT_ADDRESS_OTHER,
+};
+
+type NetworkType = keyof typeof contractAddresses;
+
+// Map chain names to NetworkType
+const networkMapping: Record<string, NetworkType> = {
+  "Ethereum Sepolia": "sepolia",
+  "Arbitrum Sepolia": "otherNetwork",
+};
+
+export async function getContractInstance(network: NetworkType) {
+  if (window.ethereum) {
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const contract = new ethers.Contract(
+      contractAddresses[network],
+      abi,
+      signer
+    );
+    return contract;
+  }
+  throw new Error("Ethereum provider not found");
+}
 
 export default function App() {
   const [selectedToken, setSelectedToken] = useState("");
-  const [selectedChain, setSelectedChain] = useState("");
+  const [sourceChain, setSourceChain] = useState<number | null>(null);
+  const [destinationChain, setDestinationChain] = useState<number | null>(null);
   const [recipientAddress, setRecipientAddress] = useState("");
   const [amount, setAmount] = useState("");
   const { transactions, addTransaction } = useTransactionHistory();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedToken || !selectedChain || !recipientAddress || !amount)
+    if (
+      !selectedToken ||
+      !sourceChain ||
+      !destinationChain ||
+      !recipientAddress ||
+      !amount
+    )
       return;
 
-    addTransaction({
-      token: selectedToken,
-      chain: selectedChain,
-      recipient: recipientAddress,
-      amount,
-    });
+    try {
+      // Find the selected chain
+      const selectedSourceChainName = chains.find(
+        (chain) => chain.id === sourceChain
+      )?.name;
+      if (!selectedSourceChainName) {
+        throw new Error("Invalid chain selected.");
+      }
+      const selectedDestinationChainName = chains.find(
+        (chain) => chain.id === destinationChain
+      )?.name;
+      if (!selectedDestinationChainName) {
+        throw new Error("Invalid chain selected.");
+      }
 
-    // Reset form
-    setSelectedToken("");
-    setSelectedChain("");
-    setRecipientAddress("");
-    setAmount("");
+      // Map the chain name to the contract address key
+      const networkKey = networkMapping[selectedSourceChainName];
+      if (!networkKey) {
+        throw new Error("Unsupported network selected.");
+      }
+
+      // Get the contract instance
+      const contract = await getContractInstance(networkKey);
+
+      if (!contract) {
+        alert("Failed to load contract instance");
+        return;
+      }
+
+      // Prepare values for the contract function
+      const sourceNetwork = chains.find(
+        (chain) => chain.name === "Ethereum Sepolia"
+      )?.id;
+      const destinationNetwork = chains.find(
+        (chain) => chain.id === destinationChain
+      )?.id;
+      if (sourceNetwork === undefined || destinationNetwork === undefined) {
+        throw new Error("Source or destination network not found.");
+      }
+
+      // Encode additional parameters (empty for now)
+      const params = "0x";
+
+      // Call the contract function
+      const tx = await contract.requestCrossChainLiquidity(
+        sourceNetwork,
+        destinationNetwork,
+        selectedToken,
+        parseEther(amount),
+        recipientAddress,
+        contractAddresses[networkKey], // Destination contract
+        params,
+        { value: parseEther("0.01") } // Assume this is the required fee
+      );
+
+      await tx.wait();
+
+      // Add to transaction history
+      addTransaction({
+        token: selectedToken,
+        chain: selectedSourceChainName,
+        recipient: recipientAddress,
+        amount,
+      });
+
+      alert("Liquidity request submitted successfully!");
+
+      // Reset form
+      setSelectedToken("");
+      setSourceChain(null);
+      setDestinationChain(null);
+      setRecipientAddress("");
+      setAmount("");
+    } catch (error) {
+      console.error("Error submitting liquidity request:", error);
+      alert("Failed to submit liquidity request. See console for details.");
+    }
   };
 
   return (
@@ -49,8 +150,8 @@ export default function App() {
                 Source Network
               </label>
               <ChainSelect
-                value={selectedChain}
-                onChange={setSelectedChain}
+                value={sourceChain?.toString() || ""}
+                onChange={(value) => setSourceChain(Number(value))}
                 chains={chains}
               />
             </div>
@@ -92,8 +193,8 @@ export default function App() {
                 Destination Network
               </label>
               <ChainSelect
-                value={selectedChain}
-                onChange={setSelectedChain}
+                value={destinationChain?.toString() || ""}
+                onChange={(value) => setDestinationChain(Number(value))}
                 chains={chains}
               />
             </div>
@@ -114,7 +215,7 @@ export default function App() {
             <button
               type="submit"
               disabled={
-                !selectedToken || !selectedChain || !recipientAddress || !amount
+                !selectedToken || !sourceChain || !destinationChain || !recipientAddress || !amount
               }
               className="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >

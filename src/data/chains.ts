@@ -1,5 +1,5 @@
 export interface Chain {
-  id: string;
+  id: number;
   name: string;
   icon: string;
   rpcUrl: string;
@@ -7,14 +7,14 @@ export interface Chain {
 
 export const chains: Chain[] = [
   {
-    id: "sepolia",
-    name: "Sepolia Testnet",
+    id: 5,
+    name: "Ethereum Sepolia",
     icon: "https://cryptologos.cc/logos/ethereum-eth-logo.svg",
     rpcUrl: "https://sepolia.infura.io/v3/",
   },
   {
-    id: "arbitrum",
-    name: "Arbitrum One",
+    id: 7,
+    name: "Arbitrum Sepolia",
     icon: "https://cryptologos.cc/logos/arbitrum-arb-logo.svg",
     rpcUrl: "https://arbitrum-mainnet.infura.io/v3/",
   },

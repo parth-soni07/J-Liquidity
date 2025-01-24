@@ -14,7 +14,7 @@ export default function ChainSelect({
   chains,
 }: ChainSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const selectedChain = chains.find((c) => c.id === value);
+  const selectedChain = chains.find((c) => c.id === Number(value));
 
   return (
     <div className="relative">
@@ -49,7 +49,7 @@ export default function ChainSelect({
                 type="button"
                 className="w-full px-4 py-2 text-left hover:bg-purple-50 flex items-center"
                 onClick={() => {
-                  onChange(chain.id);
+                  onChange(chain.id.toString());
                   setIsOpen(false);
                 }}
               >
